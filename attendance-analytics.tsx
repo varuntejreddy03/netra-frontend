@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { motion } from "framer-motion"
+import { motion, AnimatePresence } from "framer-motion" // Import AnimatePresence
 import { TrendingUp, Target, AlertTriangle, Calendar, Calculator, TrendingDown, Clock } from "lucide-react"
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card"
 import { Button } from "@/components/ui/button"
@@ -27,11 +27,21 @@ export default function AttendanceAnalytics({
   const parsedAvgClassesPerDay = Number(avgClassesPerDay) || 1
 
   // Calculate classes needed to reach target percentages
-  const calculateClassesNeeded = (targetPercentage: number): number => {
-    if (currentPercentage >= targetPercentage) return 0
-    const classesNeeded = Math.ceil(
-      (targetPercentage * totalClasses - 100 * attendedClasses) / (100 - targetPercentage),
-    )
+  const calculateClassesNeeded = (targetPercentage: number, currentAttended: number, currentTotal: number): number => {
+    if (currentTotal === 0 || (currentAttended / currentTotal) * 100 >= targetPercentage) {
+      return 0
+    }
+
+    const targetRatio = targetPercentage / 100
+    const numerator = targetRatio * currentTotal - currentAttended
+    const denominator = 1 - targetRatio
+
+    if (denominator <= 0) {
+      return numerator > 0 ? Number.POSITIVE_INFINITY : 0
+    }
+
+    const classesNeeded = Math.ceil(numerator / denominator)
+
     return Math.max(0, classesNeeded)
   }
 
@@ -49,8 +59,7 @@ export default function AttendanceAnalytics({
   }
 
   // Calculate days needed to reach target based on average classes per day
-  const calculateDaysNeeded = (targetPercentage: number): number => {
-    const classesNeeded = calculateClassesNeeded(targetPercentage)
+  const calculateDaysNeeded = (classesNeeded: number): number => {
     return Math.ceil(classesNeeded / parsedAvgClassesPerDay)
   }
 
@@ -99,14 +108,26 @@ export default function AttendanceAnalytics({
     return insights
   }
 
-  const classesFor75 = calculateClassesNeeded(75)
-  const classesFor65 = calculateClassesNeeded(65)
-  const daysFor75 = calculateDaysNeeded(75)
-  const daysFor65 = calculateDaysNeeded(65)
+  // Calculations based on initial attendance
+  const classesFor75 = calculateClassesNeeded(75, attendedClasses, totalClasses)
+  const classesFor65 = calculateClassesNeeded(65, attendedClasses, totalClasses)
+  const daysFor75 = calculateDaysNeeded(classesFor75)
+  const daysFor65 = calculateDaysNeeded(classesFor65)
 
   const numClassesToMiss = Number(classesToMissInput) || 0 // Convert input to number for calculation
   const absenceImpact = calculateAbsenceImpact(numClassesToMiss)
   const insights = getAttendanceInsights()
+
+  // NEW: Calculate classes needed for targets *after* missing classes
+  const classesFor75AfterMissing = calculateClassesNeeded(
+    75,
+    attendedClasses, // Attended classes count doesn't change by missing classes
+    absenceImpact.newTotalClasses, // Total classes increases due to missed classes
+  )
+  const classesFor65AfterMissing = calculateClassesNeeded(65, attendedClasses, absenceImpact.newTotalClasses)
+
+  const daysFor75AfterMissing = calculateDaysNeeded(classesFor75AfterMissing)
+  const daysFor65AfterMissing = calculateDaysNeeded(classesFor65AfterMissing)
 
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
@@ -212,88 +233,100 @@ export default function AttendanceAnalytics({
                 Absence Impact Calculator
               </h3>
               <Button
-                variant="ghost"
+                variant="secondary" // Changed from "ghost"
                 size="sm"
                 onClick={() => setShowCalculator(!showCalculator)}
-                className="text-gray-400 hover:text-white"
+                // Removed className="text-gray-400 hover:text-white"
               >
                 {showCalculator ? "Hide" : "Show"}
               </Button>
             </div>
 
-            {showCalculator && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: "auto" }}
-                exit={{ opacity: 0, height: 0 }}
-                transition={{ duration: 0.4, ease: "easeInOut" }}
-                className="space-y-4 p-4 bg-gray-800 rounded-lg"
-              >
-                <div className="space-y-2">
-                  <Label htmlFor="classesToMiss" className="text-white text-sm">
-                    Number of Classes to Miss
-                  </Label>
-                  <Input
-                    id="classesToMiss"
-                    type="number"
-                    min="0"
-                    value={classesToMissInput}
-                    onChange={(e) => setClassesToMissInput(e.target.value)}
-                    className="bg-gray-700 border-gray-600 text-white mt-1"
-                    placeholder="e.g., 5, 10, 15"
-                  />
-                </div>
+            <AnimatePresence>
+              {showCalculator && (
+                <motion.div
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: "auto" }}
+                  exit={{ opacity: 0, height: 0 }}
+                  transition={{ duration: 0.4, ease: "easeInOut" }}
+                  className="space-y-4 p-4 bg-gray-800 rounded-lg"
+                >
+                  <div className="space-y-2">
+                    <Label htmlFor="classesToMiss" className="text-white text-sm">
+                      Number of Classes to Miss
+                    </Label>
+                    <Input
+                      id="classesToMiss"
+                      type="number"
+                      min="0"
+                      value={classesToMissInput}
+                      onChange={(e) => setClassesToMissInput(e.target.value)}
+                      className="bg-gray-700 border-gray-600 text-white mt-1"
+                      placeholder="e.g., 5, 10, 15"
+                    />
+                  </div>
 
-                {numClassesToMiss > 0 && (
-                  <motion.div
-                    key={classesToMissInput} // Animate when input changes
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                    className="space-y-3"
-                  >
-                    <div className="flex items-center gap-2 text-red-400">
-                      <TrendingDown className="h-4 w-4" />
-                      <span className="font-semibold">Impact of Missing {numClassesToMiss} Class(es)</span>
-                    </div>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                      <div className="bg-gray-700 p-3 rounded-lg">
-                        <div className="text-gray-400">Classes Missed</div>
-                        <div className="text-white font-semibold text-lg">{absenceImpact.missedClasses}</div>
+                  {numClassesToMiss > 0 && (
+                    <motion.div
+                      key={classesToMissInput} // Animate when input changes
+                      initial={{ opacity: 0, y: 10 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.3 }}
+                      className="space-y-3"
+                    >
+                      <div className="flex items-center gap-2 text-red-400">
+                        <TrendingDown className="h-4 w-4" />
+                        <span className="font-semibold">Impact of Missing {numClassesToMiss} Class(es)</span>
                       </div>
-                      <div className="bg-gray-700 p-3 rounded-lg">
-                        <div className="text-gray-400">New Percentage</div>
-                        <div className="text-red-400 font-semibold text-lg">
-                          {absenceImpact.newPercentage.toFixed(2)}%
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div className="bg-gray-700 p-3 rounded-lg">
+                          <div className="text-gray-400">Classes Missed</div>
+                          <div className="text-white font-semibold text-lg">{absenceImpact.missedClasses}</div>
+                        </div>
+                        <div className="bg-gray-700 p-3 rounded-lg">
+                          <div className="text-gray-400">New Percentage</div>
+                          <div className="text-red-400 font-semibold text-lg">
+                            {absenceImpact.newPercentage.toFixed(2)}%
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="space-y-2">
-                      <div className="bg-gray-700 p-3 rounded-lg">
-                        <div className="text-gray-400">Classes for 75%</div>
-                        <div className="text-white font-semibold text-lg">{classesFor75} more classes</div>
+                      <div className="space-y-2">
+                        <div className="bg-gray-700 p-3 rounded-lg">
+                          <div className="text-gray-400">Classes for 75%</div>
+                          <div className="text-white font-semibold text-lg">
+                            {classesFor75AfterMissing} more classes
+                          </div>
+                          {classesFor75AfterMissing > 0 && (
+                            <div className="text-gray-400 text-xs">(≈ {daysFor75AfterMissing} days to reach 75%)</div>
+                          )}
+                        </div>
+                        <div className="bg-gray-700 p-3 rounded-lg">
+                          <div className="text-gray-400">Classes for 65%</div>
+                          <div className="text-white font-semibold text-lg">
+                            {classesFor65AfterMissing} more classes
+                          </div>
+                          {classesFor65AfterMissing > 0 && (
+                            <div className="text-gray-400 text-xs">(≈ {daysFor65AfterMissing} days to reach 65%)</div>
+                          )}
+                        </div>
                       </div>
-                      <div className="bg-gray-700 p-3 rounded-lg">
-                        <div className="text-gray-400">Classes for 65%</div>
-                        <div className="text-white font-semibold text-lg">{classesFor65} more classes</div>
-                      </div>
-                    </div>
 
-                    <div className="bg-red-900 bg-opacity-20 border border-red-500 border-opacity-30 p-3 rounded-lg">
-                      <div className="flex items-center gap-2 text-red-400 text-sm">
-                        <AlertTriangle className="h-4 w-4" />
-                        <span>
-                          Your attendance will drop by {absenceImpact.percentageDrop.toFixed(2)}% if you miss{" "}
-                          {numClassesToMiss} class(es)
-                        </span>
+                      <div className="bg-red-900 bg-opacity-20 border border-red-500 border-opacity-30 p-3 rounded-lg">
+                        <div className="flex items-center gap-2 text-red-400 text-sm">
+                          <AlertTriangle className="h-4 w-4" />
+                          <span>
+                            Your attendance will drop by {absenceImpact.percentageDrop.toFixed(2)}% if you miss{" "}
+                            {numClassesToMiss} class(es)
+                          </span>
+                        </div>
                       </div>
-                    </div>
-                  </motion.div>
-                )}
-              </motion.div>
-            )}
+                    </motion.div>
+                  )}
+                </motion.div>
+              )}
+            </AnimatePresence>
           </div>
 
           {/* Quick Stats */}

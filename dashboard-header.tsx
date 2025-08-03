@@ -6,6 +6,9 @@ import { User, LogIn, LogOut, Calendar, BookOpen, BarChart3 } from "lucide-react
 import { Button } from "@/components/ui/button"
 import { getStoredCredentials } from "./student-login"
 import ProfileModal from "./profile-modal"
+// Removed import { StudentProfile } from "./profile-modal"
+import { ThemeToggle } from "./components/theme-toggle" // Import ThemeToggle
+
 
 /**
  * Interface for the student profile data.
@@ -140,6 +143,8 @@ export default function DashboardHeader({ profile }: DashboardHeaderProps) {
                   <span className="hidden sm:inline">Login</span> {/* Hide text on very small screens */}
                 </Button>
               )}
+              {/* Theme Toggle Button */}
+              <ThemeToggle />
             </div>
           </div>
 
@@ -195,13 +200,8 @@ export default function DashboardHeader({ profile }: DashboardHeaderProps) {
         </div>
       </motion.header>
 
-      {/* Profile Modal */}
-      <ProfileModal
-        isOpen={isProfileModalOpen}
-        onClose={() => setIsProfileModalOpen(false)}
-        profile={profile}
-        username={username || ""} // Pass state username
-      />
+      /* Profile Modal */
+      /
     </>
   )
 }

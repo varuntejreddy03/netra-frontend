@@ -43,8 +43,9 @@ const formatDate = (dateString: string): string => {
 
 // Helper function to get day attendance percentage
 const getDayAttendancePercentage = (periods: PeriodStatus[]): number => {
-  const totalPeriods = periods.length
-  const presentPeriods = periods.filter((p) => p.status === 1).length
+  const countedPeriods = periods.filter((p) => p.status === 0 || p.status === 1)
+  const totalPeriods = countedPeriods.length
+  const presentPeriods = countedPeriods.filter((p) => p.status === 1).length
   return totalPeriods > 0 ? (presentPeriods / totalPeriods) * 100 : 0
 }
 
@@ -103,8 +104,28 @@ export default function AttendanceSummary() {
 
       if (response && !response.Error && response.payload) {
         const payload = response.payload
-        const overallPercentage = Number.parseFloat(payload.overallAttendance) || 0
         const attendanceDetails = payload.attendanceDetails || []
+
+        // Recalculate overall percentage based on only Present (1) and Absent (0) statuses
+        let calculatedTotalClasses = 0
+        let calculatedAttendedClasses = 0
+
+        attendanceDetails.forEach((day: any) => {
+          if (day.periods && Array.isArray(day.periods)) {
+            day.periods.forEach((period: any) => {
+              if (period.status === 0 || period.status === 1) {
+                // Only count Present (1) and Absent (0)
+                calculatedTotalClasses++
+                if (period.status === 1) {
+                  calculatedAttendedClasses++
+                }
+              }
+            })
+          }
+        })
+
+        const recalculatedOverallPercentage =
+          calculatedTotalClasses > 0 ? (calculatedAttendedClasses / calculatedTotalClasses) * 100 : 0
 
         // Get last 7 days (excluding "Today" if it exists)
         const filteredDetails = attendanceDetails
@@ -113,7 +134,7 @@ export default function AttendanceSummary() {
           .reverse() // Show most recent first
 
         setData({
-          overallPercentage,
+          overallPercentage: recalculatedOverallPercentage, // Use the recalculated value
           attendanceDetails: filteredDetails,
           loading: false,
           error: "",
