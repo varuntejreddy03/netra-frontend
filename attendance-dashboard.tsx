@@ -109,7 +109,7 @@ export default function AttendanceDashboard() {
             payload.attendanceDetails.forEach((day: any) => {
               if (day.periods && Array.isArray(day.periods)) {
                 day.periods.forEach((period: any) => {
-                  if (period.status !== undefined) {
+                  if (period.status === 0 || period.status === 1) {
                     totalClasses++
                     if (period.status === 1) {
                       // 1 = present
